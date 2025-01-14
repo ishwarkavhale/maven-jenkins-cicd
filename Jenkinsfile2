@@ -1,0 +1,112 @@
+pipeline {
+    agent any
+    
+    tools {
+        jdk 'jdk17'
+        maven 'maven3'
+    }
+    
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
+        
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', credentialsId: 'github-cred', url: 'https://github.com/ishwarkavhale/maven-jenkins-cicd.git'
+            }
+        }
+        
+        stage('Compile') {
+            steps {
+                sh "mvn compile"
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                sh "mvn test"
+            }
+        }
+        
+        stage('Trivy FS Scan') {
+            steps {
+                sh "trivy fs --format table -o fs.html ."
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Blogging-app -Dsonar.projectKey=Blogging-app \
+                           -Dsonar.java.binaries=target '''
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh "mvn clean package"
+            }
+        }
+        
+        stage('Publish Artifact') {
+            steps {
+                withMaven(globalMavenSettingsConfig: 'maven-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+                    sh 'mvn deploy'
+                }
+            }
+        }
+        
+        stage('Docker Build and Tag') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker build -t ishwardr/blogging-app:latest ."
+                    }
+                }
+            }
+        }
+        
+        stage('Trivy Iamge Scan') {
+            steps {
+                sh "trivy image --format table -o image.html ishwardr/blogging-app:latest"
+            }
+        }
+        
+        stage('Docker Push Image') {
+            steps {
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker push ishwardr/blogging-app:latest"
+                    }
+                }
+            }
+        }
+        
+        stage('K8s Deploy') {
+	       steps {
+	            withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', contextName: '', credentialsId: 'k8s-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://81016C19E480D069BA3C8CC62C9B62A8.gr7.us-east-1.eks.amazonaws.com') {
+                
+	                echo 'Current directory: $(pwd)'
+                    sh 'ls -l'
+	                sh "kubectl apply -f deployment-service.yml"
+	                sleep 20
+	            }       
+	        }
+        }
+        
+        stage('Verify the Deploy') {
+	       steps {
+	            withKubeConfig(caCertificate: '', clusterName: 'devopsshack-cluster', contextName: '', credentialsId: 'k8s-cred', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://81016C19E480D069BA3C8CC62C9B62A8.gr7.us-east-1.eks.amazonaws.com') {
+                
+	                sh "kubectl get pods"
+	                sh "kubectl get svc"
+	                
+	            }       
+	        }
+        }
+        
+    }
+}
