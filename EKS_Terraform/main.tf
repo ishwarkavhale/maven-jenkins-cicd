@@ -1,5 +1,5 @@
 provider "aws" {
-  region = "us-east-1"
+  region = "var.region"
 }
 
 resource "aws_vpc" "devopsshack_vpc" {
@@ -103,12 +103,12 @@ resource "aws_eks_node_group" "devopsshack" {
   subnet_ids      = aws_subnet.devopsshack_subnet[*].id
 
   scaling_config {
-    desired_size = 3
-    max_size     = 3
-    min_size     = 3
+    desired_size = var.node_count
+    max_size     = var.node_count
+    min_size     = var.node_count
   }
 
-  instance_types = ["t2.medium"]
+  instance_types = [var.instance_type]
 
   remote_access {
     ec2_ssh_key = var.ssh_key_name
