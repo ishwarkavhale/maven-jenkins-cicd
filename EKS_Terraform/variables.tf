@@ -9,10 +9,10 @@ variable "instance_type" {
   type        = string
 }
 
-variable "instance_count" {
+variable "node_count" {
   description = "Number of instances to create"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "ssh_key_name" {
